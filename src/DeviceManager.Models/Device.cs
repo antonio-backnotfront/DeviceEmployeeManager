@@ -1,31 +1,22 @@
-﻿namespace src.DeviceManager.Models;
+﻿using System;
+using System.Collections.Generic;
 
+namespace src.DeviceManager.Models;
 
-public abstract class Device
+public class Device
 {
-    
-    public string Id {get; set;}
-    
+
+    public int Id {get; set;}
 
     public string Name {get; set;}
     
-    public bool IsOn {get; set;}
+    public bool IsEnabled { get; set; }
     
-    public byte[] DeviceRowVersion { get; set; }
+    public string AdditionalProperties { get; set; } = null!;
     
-    protected Device(string id, string name, bool isOn)
-    {
-        Id = id;
-        Name = name;
-        IsOn = isOn;
-    }
-    
-    public virtual void TurnOn() => IsOn = true;
-    
-    public virtual void TurnOff() => IsOn = false;
-    
-    public override string ToString()
-    {
-        return $"Device {Id}: {Name}, Is turned on: {IsOn}";
-    }
+    public int? DeviceTypeId { get; set; }
+
+    public virtual ICollection<DeviceEmployee> DeviceEmployees { get; set; } = new List<DeviceEmployee>();
+
+    public virtual DeviceType? DeviceType { get; set; }
 }

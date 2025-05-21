@@ -37,15 +37,18 @@
 //
 //
 
-using System.Text.Json.Nodes;
+
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using src.DeviceManager.Services;
 using src.DeviceManager.Repositories;
 using src.DeviceManager.Services;
-using src.DeviceProject.Repository;
+using src.DTO;
 
 // using src.DeviceProject.Repository;
 
@@ -56,9 +59,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var connectionString = builder.Configuration.GetConnectionString("UniversityDatabase");
-builder.Services.AddSingleton<IDeviceRepository>(new DeviceRepository(connectionString));
-builder.Services.AddSingleton<IDeviceService, DeviceService>();
+var connectionString = builder.Configuration.GetConnectionString("DefaultDatabase");
+builder.Services.AddDbContext<DeviceEmployeeContext>(opt => opt.UseSqlServer(connectionString));
+
+builder.Services.AddTransient<IDeviceRepository,DeviceRepository>();
+builder.Services.AddTransient<IDeviceService, DeviceService>();
+builder.Services.AddTransient<IEmployeeService, EmployeeService>();
+builder.Services.AddTransient<IEmployeeRepository, EmployeeRepository>();
 
 var app = builder.Build();
 
@@ -70,117 +77,111 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// ========== Minimal API Endpoints ==========
+// ================= DEVICE ENDPOINTS =================
 
-app.MapGet("/api/devices", async (IDeviceService deviceService) =>
-{
-    var devices = deviceService.GetAllDevices().ToList();
-    return devices.Any() ? Results.Ok(devices) : Results.NotFound();
-});
-
-app.MapGet("/api/devices/{id}", async (IDeviceService deviceService, string id) =>
-{
-    var device = deviceService.GetDeviceById(id);
-    return device != null ? Results.Json(device) : Results.NotFound();
-});
-
-app.MapPost("/api/devices", async (HttpRequest request, IDeviceService deviceService) =>
-{
-    var contentType = request.ContentType?.ToLower();
-
-    using var reader = new StreamReader(request.Body);
-    var body = await reader.ReadToEndAsync();
-
-    return contentType switch
-    {
-        "application/json" => await TryAsync(async () =>
-        {
-            var json = JsonNode.Parse(body);
-            if (json == null) return Results.BadRequest("Invalid JSON format.");
-
-            await deviceService.AddDeviceByJson(json);
-            return Results.Created();
-        }),
-
-        "text/plain" => await TryAsync(async () =>
-        {
-            await deviceService.AddDeviceByRawText(body);
-            return Results.Created();
-        }),
-
-        _ => Results.Conflict("Unsupported Content-Type.")
-    };
-});
-
-app.MapPut("/api/devices", async (HttpRequest request, IDeviceService deviceService) =>
-{
-    var contentType = request.ContentType?.ToLower();
-    if (contentType != "application/json")
-        return Results.Conflict("Unsupported Content-Type.");
-
-    using var reader = new StreamReader(request.Body);
-    var rawJson = await reader.ReadToEndAsync();
-    var json = JsonNode.Parse(rawJson);
-
-    if (json == null)
-        return Results.BadRequest("Invalid JSON format.");
-
-    try
-    {
-        await deviceService.UpdateDevice(json);
-        return Results.Ok();
-    }
-    catch (FileNotFoundException e)
-    {
-        return Results.NotFound(e.Message);
-    }
-    catch (Exception e)
-    {
-        return Results.BadRequest(e.Message);
-    }
-});
-
-app.MapDelete("/api/devices/{id}", async (IDeviceService deviceService, string id) =>
+app.MapGet("/api/devices", async (IDeviceService service, CancellationToken ct) =>
 {
     try
     {
-        await deviceService.DeleteDevice(id);
-        return Results.Ok();
-    }
-    catch (FileNotFoundException e)
-    {
-        return Results.NotFound(e.Message);
-    }
-    catch (Exception e)
-    {
-        return Results.BadRequest(e.Message);
-    }
-});
-
-app.Run();
-
-// Helper method to wrap common try-catch usage
-static IResult Try(Func<IResult> action)
-{
-    try
-    {
-        return action();
-    }
-    catch (Exception e)
-    {
-        return Results.BadRequest(e.Message);
-    }
-}
-
-static async Task<IResult> TryAsync(Func<Task<IResult>> func)
-{
-    try
-    {
-        return await func();
+        var results = await service.GetAllDevices(ct);
+        return results.Count > 0 ? Results.Ok(results) : Results.NotFound("No devices found");
     }
     catch (Exception ex)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.Problem(detail: ex.Message);
     }
-}
+});
+
+app.MapGet("/api/devices/{id}", async (int id, IDeviceService service, CancellationToken ct) =>
+{
+    try
+    {
+        var device = await service.GetDeviceById(id, ct);
+        return device is not null ? Results.Ok(device) : Results.NotFound("Device not found");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+app.MapPost("/api/devices", async (CreateDeviceDto dto, IDeviceService service, CancellationToken ct) =>
+{
+    try
+    {
+        await service.CreateDevice(dto, ct);
+        return Results.Created("/api/devices", dto);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+app.MapPut("/api/devices/{id}", async (int id, UpdateDeviceDto dto, IDeviceService service, CancellationToken ct) =>
+{
+    try
+    {
+        await service.UpdateDevice(id, dto, ct);
+        return Results.Ok();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound($"No device found with id: '{id}'");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+app.MapDelete("/api/devices/{id}", async (int id, IDeviceService service, CancellationToken ct) =>
+{
+    try
+    {
+        await service.DeleteDevice(id, ct);
+        return Results.Ok();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound($"No device found with id: '{id}'");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+// ================= EMPLOYEE ENDPOINTS =================
+
+app.MapGet("/api/employees", async (IEmployeeService service, CancellationToken ct) =>
+{
+    try
+    {
+        var list = await service.GetAllEmployees(ct);
+        return list.Any() ? Results.Ok(list) : Results.NotFound("No employees found");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+app.MapGet("/api/employees/{id}", async (int id, IEmployeeService service, CancellationToken ct) =>
+{
+    try
+    {
+        var employee = await service.GetEmployeeById(id, ct);
+        return employee != null ? Results.Ok(employee) : Results.NotFound("Employee not found");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message);
+    }
+});
+
+
+app.Run();
+
+
 

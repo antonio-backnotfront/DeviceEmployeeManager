@@ -1,11 +1,9 @@
 ﻿using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
-using Microsoft.IdentityModel.Tokens;
+// using src.DeviceManager.API;
+
 using src.DeviceManager.Models;
-using src.DeviceManager.Repositories;
 using src.DeviceManager.Services;
-using src.DeviceProject.Repository;
+using src.DTO;
 
 namespace src.DeviceManager.Services;
 
@@ -18,184 +16,95 @@ public class DeviceService : IDeviceService
         _deviceRepository = deviceRepository;
     }
 
-    public IEnumerable<DeviceDTO> GetAllDevices() => _deviceRepository.GetAllDevices();
-
-    public Device? GetDeviceById(string id) => _deviceRepository.GetDeviceById(id);
-
-    public async Task<bool> AddDeviceByJson(JsonNode? json)
+    public async Task<List<GetDevicesDto>> GetAllDevices(CancellationToken cancellationToken)
     {
-        var deviceType = json?["deviceType"]?.ToString()?.ToLower();
-        if (string.IsNullOrEmpty(deviceType))
-            throw new ArgumentException("Invalid JSON format. deviceType is not specified.");
+        var devices = await _deviceRepository.GetAllDevices(cancellationToken);
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        return deviceType switch
+        return devices.Select(device => new GetDevicesDto
         {
-            "sw" => await DeserializeAndAddDevice<SmartWatch>(json, options, ValidateSmartWatch, d => _deviceRepository.AddSmartWatch(d)),
-            "pc" => await DeserializeAndAddDevice<PersonalComputer>(json, options, ValidatePC, d => _deviceRepository.AddPersonalComputer(d)),
-            "ed" => await DeserializeAndAddDevice<EmbeddedDevice>(json, options, ValidateEmbeddedDevice, d => _deviceRepository.AddEmbeddedDevice(d)),
-            _ => throw new ApplicationException("Unknown device type.")
+            Id = device.Id,
+            Name = device.Name
+        }).ToList();
+    }
+
+    public async Task<GetDeviceDto?> GetDeviceById(int id, CancellationToken cancellationToken)
+    {
+        var device = await _deviceRepository.GetDeviceById(id, cancellationToken);
+        if (device is null) return null;
+
+        var dto = new GetDeviceDto
+        {
+            Name = device.Name,
+            DeviceType = device.DeviceType.Name,
+            AdditionalProperties = JsonDocument.Parse(device.AdditionalProperties).RootElement
         };
-    }
 
-    public async Task<bool> AddDeviceByRawText(string text)
-    {
-        var parts = text.Split(',');
-        var idPrefix = parts[0].Split('-')[0].ToLower();
-
-        return idPrefix switch
+        var activeAssignment = device.DeviceEmployees.FirstOrDefault(e => e.ReturnDate == null);
+        if (activeAssignment != null)
         {
-            "sw" => await AddSmartWatchFromText(parts),
-            "p" => await AddPCFromText(parts),
-            "ed" => await AddEmbeddedDeviceFromText(parts),
-            _ => throw new ArgumentException("Unknown device.")
-        };
-    }
-
-    public async Task<bool> UpdateDevice(JsonNode? json)
-    {
-        var id = json?["device_id"]?.ToString();
-        if (string.IsNullOrEmpty(id))
-            throw new ArgumentException("Invalid or not specified id.");
-
-        if (GetDeviceById(id) == null)
-            throw new FileNotFoundException("Device not found.");
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        if (id.Contains("SW"))
-            return await DeserializeAndUpdateDevice<SmartWatch>(json, options, ValidateSmartWatch, _deviceRepository.UpdateSmartWatch);
-        else if (id.Contains("P"))
-            return await DeserializeAndUpdateDevice<PersonalComputer>(json, options, ValidatePC, _deviceRepository.UpdatePersonalComputer);
-        else if (id.Contains("ED"))
-            return await DeserializeAndUpdateDevice<EmbeddedDevice>(json, options, ValidateEmbeddedDevice, _deviceRepository.UpdateEmbeddedDevice);
-
-        throw new ApplicationException("Unknown device type.");
-    }
-
-    async public Task<bool> DeleteDevice(string id)
-    {
-        if (GetDeviceById(id) == null)
-            throw new FileNotFoundException("Device not found.");
-
-        if (id.Contains("SW")) await _deviceRepository.DeleteWatch(id);
-        else if (id.Contains("P")) await _deviceRepository.DeleteComputer(id);
-        else if (id.Contains("ED")) await _deviceRepository.DeleteEmbeddedDevice(id);
-        else throw new ApplicationException("Unknown device type.");
-
-        return true;
-    }
-
-    public static async Task<bool> DeserializeAndAddDevice<T>(JsonNode? json, JsonSerializerOptions options, Action<T> validator, Action<T> repositoryAdd) where T : class
-    {
-        T? device;
-        try { device = JsonSerializer.Deserialize<T>(json, options); }
-        catch { throw new ArgumentException("JSON deserialization failed. Seek help."); }
-
-        if (device == null)
-            throw new ArgumentException("JSON deserialization failed. Seek help.");
-
-        validator(device);
-        repositoryAdd(device);
-        await Task.CompletedTask;
-        return true;
-    }
-
-    public static async Task<bool> DeserializeAndUpdateDevice<T>(
-        JsonNode? json,
-        JsonSerializerOptions options,
-        Action<T> validator,
-        Func<T, Task> repositoryUpdate
-    ) where T : class
-    {
-        T? device;
-        try
-        {
-            device = JsonSerializer.Deserialize<T>(json, options);
-        }
-        catch
-        {
-            throw new ArgumentException("JSON deserialization failed. Seek help.");
+            var person = activeAssignment.Employee.Person;
+            dto.CurrentEmployee = new GetEmployeesDto(
+                activeAssignment.Id,
+                $"{person.FirstName} {person.MiddleName} {person.LastName}"
+            );
         }
 
-        if (device == null)
-            throw new ArgumentException("JSON deserialization failed. Seek help.");
-
-        validator(device);
-        await repositoryUpdate(device);
-        return true;
+        return dto;
     }
 
-
-    private static void ValidateSmartWatch(SmartWatch watch)
+    public async Task<bool> CreateDevice(CreateDeviceDto dto, CancellationToken cancellationToken)
     {
-        if (watch.BatteryCharge is < 0 or > 100)
-            throw new ArgumentException("Battery charge is out of range [0 - 100].");
-    }
+        if (string.IsNullOrWhiteSpace(dto.DeviceType))
+            throw new ArgumentException("Invalid device type");
 
-    private static void ValidatePC(PersonalComputer pc)
-    {
-        if (pc.IsOn && pc.OperatingSystem.IsNullOrEmpty())
-            throw new ArgumentException("PC cannot be turned on without operating system.");
-    }
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            throw new ArgumentException("Invalid device name");
 
-    private static void ValidateEmbeddedDevice(EmbeddedDevice ed)
-    {
-        if (!Regex.IsMatch(ed.IpAddress, @"^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$"))
-            throw new ArgumentException("IP address is not a valid IP address.");
+        var deviceType = await _deviceRepository.GetDeviceTypeByName(dto.DeviceType, cancellationToken)
+                         ?? throw new ArgumentException("Invalid device type");
 
-        if (!ed.IsOn && ed.IsConnected)
-            throw new ArgumentException("Device cannot be connected if it is turned off.");
-
-        if (ed.IsConnected && !ed.NetworkName.Contains("MD Ltd."))
-            throw new ArgumentException("The network name should contain \"MD Ltd.\" for the device to be able to be connected.");
-    }
-
-    async public Task<bool> AddSmartWatchFromText(string[] parts)
-    {
-        var watch = new SmartWatch
+        var device = new Device
         {
-            Device_Id = parts[0],
-            Name = parts[1],
-            IsOn = bool.TryParse(parts[2], out var isOn) ? isOn : throw new ArgumentException("Invalid boolean value for IsOn parameter."),
-            BatteryCharge = int.TryParse(parts[3].Replace("%", ""), out var battery) ? battery : throw new ArgumentException("Invalid int value for BatteryCharge parameter.")
+            Name = dto.Name,
+            DeviceType = deviceType,
+            IsEnabled = dto.IsEnabled,
+            AdditionalProperties = dto.AdditionalProperties ?? ""
         };
 
-        ValidateSmartWatch(watch);
-        await _deviceRepository.AddSmartWatch(watch);
+        await _deviceRepository.CreateDevice(device, cancellationToken);
         return true;
     }
 
-    async public Task<bool> AddPCFromText(string[] parts)
+    public async Task<bool> UpdateDevice(int id, UpdateDeviceDto dto, CancellationToken cancellationToken)
     {
-        var pc = new PersonalComputer
+        if (string.IsNullOrWhiteSpace(dto.DeviceType))
+            throw new ArgumentException("Invalid device type");
+
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            throw new ArgumentException("Invalid device name");
+
+        var existingDevice = await _deviceRepository.GetDeviceById(id, cancellationToken)
+                              ?? throw new KeyNotFoundException("Device not found");
+
+        var deviceType = await _deviceRepository.GetDeviceTypeByName(dto.DeviceType, cancellationToken)
+                         ?? throw new ArgumentException("Invalid device type");
+
+        var updatedDevice = new Device
         {
-            Device_Id = parts[0],
-            Name = parts[1],
-            IsOn = bool.TryParse(parts[2], out var isOn) ? isOn : throw new ArgumentException("Invalid boolean value for IsOn parameter."),
-            OperatingSystem = parts.Length > 3 ? parts[3] : ""
+            Name = dto.Name,
+            IsEnabled = dto.IsEnabled,
+            DeviceType = deviceType,
+            AdditionalProperties = dto.AdditionalProperties ?? ""
         };
 
-        ValidatePC(pc);
-        await _deviceRepository.AddPersonalComputer(pc);
-        return true;
+        return await _deviceRepository.UpdateDevice(id, updatedDevice, cancellationToken);
     }
 
-    async public Task<bool> AddEmbeddedDeviceFromText(string[] parts)
+    public async Task<bool> DeleteDevice(int id, CancellationToken cancellationToken)
     {
-        var ed = new EmbeddedDevice
-        {
-            Device_Id = parts[0],
-            Name = parts[1],
-            IpAddress = parts[2],
-            NetworkName = parts[3],
-            IsOn = false,
-            IsConnected = false
-        };
+        var device = await _deviceRepository.GetDeviceById(id, cancellationToken)
+                     ?? throw new KeyNotFoundException("Device not found");
 
-        ValidateEmbeddedDevice(ed);
-        await _deviceRepository.AddEmbeddedDevice(ed);
-        return true;
+        return await _deviceRepository.DeleteDevice(id, cancellationToken);
     }
 }
