@@ -22,7 +22,7 @@
 **/.idea/**/modules.xml
 
 .idea/
-API/appsettings.json
+API/appsettings.*
 
 *.suo
 *.user
