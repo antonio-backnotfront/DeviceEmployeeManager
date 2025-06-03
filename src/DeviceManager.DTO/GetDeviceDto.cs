@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace src.DTO;
 
 public class GetDeviceDto
@@ -6,7 +8,7 @@ public class GetDeviceDto
     public bool IsEnabled { get; set; }
     public string DeviceType { get; set; }
     public object? CurrentEmployee { get; set; }
-    public object AdditionalProperties { get; set; }
+    public JsonElement AdditionalProperties { get; set; }
     public GetDeviceDto() { }
     
 }

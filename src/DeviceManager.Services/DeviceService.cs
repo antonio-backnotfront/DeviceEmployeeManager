@@ -36,7 +36,7 @@ public class DeviceService : IDeviceService
         {
             Name = device.Name,
             DeviceType = device.DeviceType.Name,
-            AdditionalProperties = JsonDocument.Parse(device.AdditionalProperties).RootElement
+            AdditionalProperties = JsonDocument.Parse(device.AdditionalProperties ?? "").RootElement
         };
 
         var activeAssignment = device.DeviceEmployees.FirstOrDefault(e => e.ReturnDate == null);
