@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using src.DeviceManager.Exceptions;
 // using src.DeviceManager.API;
 
 using src.DeviceManager.Models;
@@ -61,7 +62,7 @@ public class DeviceService : IDeviceService
             throw new ArgumentException("Invalid device name");
 
         var deviceType = await _deviceRepository.GetDeviceTypeByName(dto.DeviceType, cancellationToken)
-                         ?? throw new ArgumentException("Invalid device type");
+                         ?? throw new InvalidDeviceTypeException();
 
         var device = new Device
         {

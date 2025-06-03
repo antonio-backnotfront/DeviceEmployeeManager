@@ -45,6 +45,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using src.DeviceManager.Exceptions;
 using src.DeviceManager.Services;
 using src.DeviceManager.Repositories;
 using src.DeviceManager.Services;
@@ -74,21 +75,20 @@ Console.WriteLine("connection string = " + connectionString);
 
 builder.Services.AddDbContext<DeviceEmployeeContext>(opt => opt.UseSqlServer(connectionString));
 
-// FOR LOCAL TESTING ON MYSQL
-// FOR LOCAL TESTING ON MYSQL
-// FOR LOCAL TESTING ON MYSQL
+// ================= FOR LOCAL TESTING ON MYSQL =================
+// ================= FOR LOCAL TESTING ON MYSQL =================
+// ================= FOR LOCAL TESTING ON MYSQL =================
 
             // builder.Services.AddDbContext<DeviceEmployeeContext>(options =>
             //         options.UseMySql(
             //                 connectionString,
-            //                 new MySqlServerVersion(new Version(9, 3,0)), mySqlOptions => mySqlOptions.EnableRetryOnFailure()
+            //                 new MySqlServerVersion(new Version(9, 3,0))
             //             )
             //         
             // );
 
-// FOR LOCAL TESTING ON MYSQL
-// FOR LOCAL TESTING ON MYSQL
-// FOR LOCAL TESTING ON MYSQL
+// ================= FOR LOCAL TESTING ON MYSQL =================
+
 
 builder.Services.AddTransient<IDeviceRepository,DeviceRepository>();
 builder.Services.AddTransient<IDeviceService, DeviceService>();
@@ -140,9 +140,9 @@ app.MapPost("/api/devices", async (CreateDeviceDto dto, IDeviceService service, 
         await service.CreateDevice(dto, ct);
         return Results.Created("/api/devices", dto);
     }
-    catch (Exception ex)
+    catch (InvalidDeviceTypeException ex)
     {
-        return Results.Problem(detail: ex.Message);
+        return Results.BadRequest(ex.Message);
         
     }
 });
