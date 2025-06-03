@@ -72,6 +72,7 @@ public class DeviceService : IDeviceService
         };
 
         await _deviceRepository.CreateDevice(device, cancellationToken);
+        dto.Id = device.Id;
         return true;
     }
 

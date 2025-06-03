@@ -9,7 +9,8 @@ public class CreateDeviceDto
         IsEnabled = isEnabled;
         AdditionalProperties = additionalProperties;
     }
-
+    
+    public int Id { get; set; }
     public string Name { get; set; }
     public string? DeviceType { get; set; }
     public bool IsEnabled { get; set; }
