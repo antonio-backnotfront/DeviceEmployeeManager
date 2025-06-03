@@ -68,7 +68,7 @@ public class DeviceService : IDeviceService
             Name = dto.Name,
             DeviceType = deviceType,
             IsEnabled = dto.IsEnabled,
-            AdditionalProperties = dto.AdditionalProperties ?? ""
+            AdditionalProperties = dto.AdditionalProperties.GetRawText()
         };
 
         await _deviceRepository.CreateDevice(device, cancellationToken);

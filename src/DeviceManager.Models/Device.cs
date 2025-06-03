@@ -12,7 +12,7 @@ public class Device
     
     public bool IsEnabled { get; set; }
     
-    public string AdditionalProperties { get; set; } = null!;
+    public string AdditionalProperties { get; set; }
     
     public int? DeviceTypeId { get; set; }
 
