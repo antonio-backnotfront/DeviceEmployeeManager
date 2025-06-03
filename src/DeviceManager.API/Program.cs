@@ -50,6 +50,15 @@ using src.DeviceManager.Repositories;
 using src.DeviceManager.Services;
 using src.DTO;
 
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+                            // using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+                            // using Microsoft.EntityFrameworkCore;
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+
 // using src.DeviceProject.Repository;
 
 
@@ -60,7 +69,26 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultDatabase");
+Console.WriteLine("connection string = " + connectionString);
+
+
 builder.Services.AddDbContext<DeviceEmployeeContext>(opt => opt.UseSqlServer(connectionString));
+
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+
+            // builder.Services.AddDbContext<DeviceEmployeeContext>(options =>
+            //         options.UseMySql(
+            //                 connectionString,
+            //                 new MySqlServerVersion(new Version(9, 3,0)), mySqlOptions => mySqlOptions.EnableRetryOnFailure()
+            //             )
+            //         
+            // );
+
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
+// FOR LOCAL TESTING ON MYSQL
 
 builder.Services.AddTransient<IDeviceRepository,DeviceRepository>();
 builder.Services.AddTransient<IDeviceService, DeviceService>();
@@ -115,6 +143,7 @@ app.MapPost("/api/devices", async (CreateDeviceDto dto, IDeviceService service, 
     catch (Exception ex)
     {
         return Results.Problem(detail: ex.Message);
+        
     }
 });
 

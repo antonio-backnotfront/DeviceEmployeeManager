@@ -22,6 +22,8 @@
 **/.idea/**/modules.xml
 
 .idea/
+
+
 **/appsettings.*
 
 *.suo

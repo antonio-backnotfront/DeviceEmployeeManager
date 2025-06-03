@@ -100,16 +100,23 @@ namespace src.DeviceManager.Repositories
             try
             {
                 var device = await _context.Devices.FirstOrDefaultAsync(d => d.Id == id,cancellationToken);
-
+                
                 if (device == null)
                     throw new KeyNotFoundException($"Device with ID {id} not found.");
-
+                
+                var deviceEmployee = await _context.DeviceEmployees.FirstOrDefaultAsync(a => a.DeviceId == device.Id, cancellationToken);
+                
+                if (deviceEmployee != null) 
+                    _context.DeviceEmployees.Remove(deviceEmployee);
+                    
                 _context.Devices.Remove(device);
+                
                 await _context.SaveChangesAsync();
                 return true;
             }
             catch (Exception ex)
             {
+                Console.WriteLine(ex.Message);
                 throw new ApplicationException($"Failed to delete device with ID {id}.", ex);
             }
         }
